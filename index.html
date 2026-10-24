@@ -68,7 +68,7 @@ code{background:var(--code);padding:1px 5px;border-radius:4px}
     <input type="file" id="file" accept=".log,.txt,text/plain">
     <button id="clear">Vider</button>
   </div>
-  <!-- <div class="row" id="samples"><span class="sub" style="margin:0">Essayer avec un exemple :</span></div> -->
+  <div class="row" id="samples"><span class="sub" style="margin:0">Essayer avec un exemple :</span></div>
 </details>
 
 <details class="box" id="ai" style="margin-top:12px">
@@ -332,13 +332,14 @@ async function loadFile(f) {
 }
 
 PARSERS.forEach(p => $('#fmt').insertAdjacentHTML('beforeend', '<option value="' + p.id + '">' + p.name + '</option>'));
-if (typeof SAMPLES === 'undefined') $('#samples').remove();
+const smp = $('#samples');
+if (!smp || typeof SAMPLES === 'undefined') { if (smp) smp.remove(); }
 else PARSERS.forEach(p => {
   if (!SAMPLES[p.id]) return;
   const b = document.createElement('button');
   b.textContent = p.name;
   b.onclick = () => { $('#txt').value = SAMPLES[p.id]; $('#fmt').value = 'auto'; analyse(); };
-  $('#samples').appendChild(b);
+  smp.appendChild(b);
 });
 
 $('#go').onclick = analyse;
