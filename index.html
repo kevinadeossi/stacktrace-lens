@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stacktrace Lens</title>
+    <style>
+      :root {
+        --bg: #f5f6f8;
+        --panel: #fff;
+        --ink: #1c2330;
+        --mute: #667085;
+        --line: #dde1e8;
+        --acc: #0f6b7a;
+        --accbg: #e3f2f4;
+        --err: #b42318;
+        --warn: #a15c07;
+        --info: #175cd3;
+        --code: #f0f2f5;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #12161d;
+          --panel: #1a2029;
+          --ink: #e6e9ef;
+          --mute: #98a2b3;
+          --line: #2b3340;
+          --acc: #4cc2d4;
+          --accbg: #14323a;
+          --err: #ff8a7e;
+          --warn: #f5b64a;
+          --info: #7cb0ff;
+          --code: #222a35;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          15px/1.5 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 28px 18px 60px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: var(--mute);
+        margin: 0 0 20px;
+      }
+      .box {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      textarea {
+        width: 100%;
+        min-height: 150px;
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--code);
+        color: var(--ink);
+        font:
+          13px/1.45 Consolas,
+          "Cascadia Mono",
+          monospace;
+        resize: vertical;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-top: 10px;
+      }
+      button,
+      .btn,
+      select {
+        font: inherit;
+        font-size: 14px;
+        padding: 7px 14px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      button.main {
+        background: var(--acc);
+        border-color: var(--acc);
+        color: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        button.main {
+          color: #08262b;
+        }
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      summary:focus-visible,
+      textarea:focus-visible,
+      .btn:focus-visible {
+        outline: 2px solid var(--acc);
+        outline-offset: 2px;
+      }
+      #file {
+        display: none;
+      }
+      #bar {
+        margin: 18px 0 10px;
+        display: none;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      #bar input[type="search"] {
+        flex: 1;
+        min-width: 180px;
+        font: inherit;
+        font-size: 14px;
+        padding: 7px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--ink);
+      }
+      .chip {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 99px;
+        font-size: 13px;
+      }
+      .chip[aria-pressed="false"] {
+        opacity: 0.45;
+      }
+      #stats {
+        color: var(--mute);
+        font-size: 14px;
+        margin: 6px 0 12px;
+      }
+      .g {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-left-width: 4px;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+      }
+      .g.l-err {
+        border-left-color: var(--err);
+      }
+      .g.l-warn {
+        border-left-color: var(--warn);
+      }
+      .g.l-info {
+        border-left-color: var(--info);
+      }
+      .top {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .lvl {
+        font-weight: 700;
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: var(--code);
+      }
+      .l-err .lvl {
+        color: var(--err);
+      }
+      .l-warn .lvl {
+        color: var(--warn);
+      }
+      .l-info .lvl {
+        color: var(--info);
+      }
+      .cnt {
+        margin-left: auto;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .msg {
+        flex: 1;
+        font-weight: 600;
+        word-break: break-word;
+      }
+      .meta {
+        color: var(--mute);
+        font-size: 13px;
+        margin: 4px 0 8px;
+      }
+      .origin {
+        background: var(--accbg);
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin: 8px 0;
+        font:
+          13px/1.5 Consolas,
+          "Cascadia Mono",
+          monospace;
+        word-break: break-all;
+      }
+      .origin b {
+        font-family: system-ui, sans-serif;
+        color: var(--acc);
+      }
+      ol.fr {
+        margin: 6px 0 0;
+        padding-left: 0;
+        list-style: none;
+        font:
+          12.5px/1.6 Consolas,
+          "Cascadia Mono",
+          monospace;
+      }
+      ol.fr li {
+        padding: 1px 0;
+        word-break: break-all;
+      }
+      ol.fr .ven {
+        color: var(--mute);
+      }
+      .ln {
+        color: var(--acc);
+      }
+      details.v {
+        margin-top: 6px;
+      }
+      details.v summary {
+        font-weight: 400;
+        color: var(--mute);
+        font-size: 13px;
+      }
+      .empty {
+        text-align: center;
+        color: var(--mute);
+        padding: 36px 10px;
+      }
+      code {
+        background: var(--code);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Stacktrace Lens</h1>
+      <p class="sub">
+        Colle un log ou une stack trace Laravel, Node.js ou Python. Le format
+        est détecté tout seul. Tout reste dans ton navigateur, rien n’est envoyé
+        nulle part.
+      </p>
+
+      <details class="box" id="input" open>
+        <summary>Source du log</summary>
+        <textarea
+          id="txt"
+          placeholder="Colle ici ton log ou ta stack trace…"
+          spellcheck="false"
+        ></textarea>
+        <div class="row">
+          <button class="main" id="go">Analyser</button>
+          <select id="fmt" aria-label="Format">
+            <option value="auto">Format : détection auto</option>
+          </select>
+          <label class="btn" for="file" tabindex="0">Charger un fichier</label>
+          <input type="file" id="file" accept=".log,.txt,text/plain" />
+          <button id="clear">Vider</button>
+        </div>
+        <div class="row" id="samples">
+          <span class="sub" style="margin: 0">Essayer avec un exemple :</span>
+        </div>
+      </details>
+
+      <div id="bar" class="row">
+        <input
+          type="search"
+          id="q"
+          placeholder="Filtrer par texte, classe, fichier…"
+          aria-label="Filtrer"
+        />
+        <select id="sort" aria-label="Tri">
+          <option value="count">Tri : plus fréquentes</option>
+          <option value="recent">Tri : plus récentes</option>
+          <option value="sev">Tri : plus graves</option>
+        </select>
+        <div id="chips" class="row" style="margin: 0"></div>
+      </div>
+      <div id="stats"></div>
+      <div id="out"></div>
+    </main>
+
+    <script>
+      const $ = (s) => document.querySelector(s);
+      const SEV = {
+        EMERGENCY: 0,
+        ALERT: 1,
+        CRITICAL: 2,
+        FATAL: 2,
+        ERROR: 3,
+        WARNING: 4,
+        WARN: 4,
+        NOTICE: 5,
+        INFO: 6,
+        DEBUG: 7,
+      };
+      const esc = (s) =>
+        String(s).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      const cls = (l) =>
+        (SEV[l] ?? 9) <= 3
+          ? "err"
+          : l === "WARNING" || l === "WARN"
+            ? "warn"
+            : "info";
+      const isVendor = (f) =>
+        !f ||
+        /[\\/](vendor|node_modules|site-packages|dist-packages)[\\/]|^node:|[\\/]lib[\\/]python|^<frozen/i.test(
+          f,
+        );
+      const mkFrame = (file, line, call) => ({
+        file,
+        line,
+        call,
+        vendor: isVendor(file),
+      });
+
+      // Pour ajouter un format : pousser un objet {id, name, detect(texte), parse(texte)} dans PARSERS.
+      // parse() renvoie une liste d'entrées {date, level, msg, frames:[{file,line,call,vendor}], mo?}.
+      const LARAVEL =
+        /^\[(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]\s+([\w.-]+)\.([A-Za-z]+):\s?(.*)$/;
+      const DATE = /^(\d{4}-\d{2}-\d{2}[T ][\d:.,]+Z?)/;
+
+      const PARSERS = [
+        {
+          id: "laravel",
+          name: "Laravel",
+          detect: (t) =>
+            /^\[\d{4}-\d{2}-\d{2}[ T][\d:.,]+(?:Z|[+-]\d{2}:?\d{2})?\]\s+[\w.-]+\.[A-Za-z]+:/m.test(
+              t,
+            ),
+          parse(t) {
+            const out = [];
+            let cur = null;
+            for (const line of t.split(/\r?\n/)) {
+              const m = line.match(LARAVEL);
+              if (m) {
+                const head = m[4].split("[stacktrace]")[0];
+                const mo = head.match(
+                  / at ((?:[A-Za-z]:)?[^\s:()"]+\.php):(\d+)/,
+                );
+                cur = {
+                  date: m[1],
+                  level: m[3].toUpperCase(),
+                  msg: head,
+                  frames: [],
+                  mo: mo
+                    ? { file: mo[1], line: mo[2], vendor: isVendor(mo[1]) }
+                    : null,
+                };
+                out.push(cur);
+              } else if (cur) {
+                const f = line.match(/^#\d+\s+(.*)$/);
+                if (!f) continue;
+                const p = f[1].match(/^(.*?)\((\d+)\):\s*(.*)$/);
+                cur.frames.push(
+                  p ? mkFrame(p[1], p[2], p[3]) : mkFrame("", "", f[1]),
+                );
+              }
+            }
+            return out;
+          },
+        },
+        {
+          id: "python",
+          name: "Python",
+          detect: (t) => /^Traceback \(most recent call last\):/m.test(t),
+          parse(t) {
+            const out = [];
+            let cur = null,
+              prev = "";
+            for (const line of t.split(/\r?\n/)) {
+              if (/^Traceback \(most recent call last\):/.test(line)) {
+                cur = {
+                  date: (prev.match(DATE) || [])[1] || "",
+                  level: "ERROR",
+                  msg: "",
+                  frames: [],
+                };
+                continue;
+              }
+              if (cur) {
+                const f = line.match(
+                  /^\s+File "(.+)", line (\d+)(?:, in (.+))?$/,
+                );
+                if (f) cur.frames.unshift(mkFrame(f[1], f[2], f[3] || ""));
+                else if (line && !/^\s/.test(line) && cur.frames.length) {
+                  cur.msg = line;
+                  out.push(cur);
+                  cur = null;
+                }
+              } else if (line.trim()) prev = line;
+            }
+            return out;
+          },
+        },
+        {
+          id: "node",
+          name: "Node.js",
+          detect: (t) => /^\s+at\s+.+:\d+:\d+\)?\s*$/m.test(t),
+          parse(t) {
+            const out = [];
+            let cur = null;
+            for (const line of t.split(/\r?\n/)) {
+              const f = line.match(
+                /^\s+at\s+(?:(.*?)\s+\()?(.+?):(\d+)(?::(\d+))?\)?\s*$/,
+              );
+              if (/^\s+at\s+/.test(line)) {
+                if (cur)
+                  cur.frames.push(
+                    f
+                      ? mkFrame(f[2], f[3], f[1] || "<anonymous>")
+                      : mkFrame("", "", line.trim().replace(/^at\s+/, "")),
+                  );
+              } else if (line.trim() && !/^\s/.test(line)) {
+                const d = (line.match(DATE) || [])[1] || "";
+                let rest = line.slice(d.length).replace(/^[\s:-]+/, "");
+                const lv = rest.match(
+                  /^\[?(error|warn|warning|info|debug|fatal)\]?:?\s*(.*)$/i,
+                );
+                cur = {
+                  date: d,
+                  level: lv
+                    ? lv[1].toUpperCase()
+                    : /Error|Exception/.test(rest)
+                      ? "ERROR"
+                      : "INFO",
+                  msg: lv ? lv[2] : rest,
+                  frames: [],
+                };
+                out.push(cur);
+              }
+            }
+            return out;
+          },
+        },
+      ];
+
+      const norm = (s) =>
+        s
+          .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "<email>")
+          .replace(
+            /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+            "<uuid>",
+          )
+          .replace(/\b0x[0-9a-f]+\b/gi, "<hex>")
+          .replace(/(?<!\.(?:php|js|py):)\b\d+\b/g, "N");
+
+      const shortPath = (p) =>
+        p.replace(
+          /^.*?[\\/](app|routes|resources|database|config|bootstrap|tests|src|vendor|node_modules|site-packages)[\\/]/i,
+          "$1/",
+        );
+
+      let groups = [],
+        fmtName = "";
+      const activeLevels = new Set();
+
+      function build(entries) {
+        const map = new Map();
+        entries.forEach((e, i) => {
+          const key = e.level + "|" + norm(e.msg).slice(0, 400);
+          let g = map.get(key);
+          if (!g) {
+            g = {
+              level: e.level,
+              msg: e.msg,
+              count: 0,
+              first: e.date,
+              last: e.date,
+              idx: i,
+              fr: [],
+              mo: null,
+            };
+            map.set(key, g);
+          }
+          g.count++;
+          g.last = e.date;
+          g.idx = i;
+          if (e.frames.length) g.fr = e.frames;
+          if (e.mo) g.mo = e.mo;
+        });
+        return [...map.values()];
+      }
+
+      function render() {
+        const q = $("#q").value.trim().toLowerCase();
+        const sort = $("#sort").value;
+        let list = groups.filter((g) => activeLevels.has(g.level));
+        if (q)
+          list = list.filter((g) =>
+            (g.msg + g.fr.map((f) => f.file + " " + f.call).join(" "))
+              .toLowerCase()
+              .includes(q),
+          );
+        list.sort((a, b) =>
+          sort === "count"
+            ? b.count - a.count
+            : sort === "recent"
+              ? b.idx - a.idx
+              : (SEV[a.level] ?? 9) - (SEV[b.level] ?? 9) || b.count - a.count,
+        );
+
+        const total = list.reduce((n, g) => n + g.count, 0);
+        $("#stats").textContent =
+          "Format : " +
+          fmtName +
+          " — " +
+          list.length +
+          " erreur(s) distincte(s), " +
+          total +
+          " occurrence(s) affichée(s)";
+        if (!list.length) {
+          $("#out").innerHTML =
+            '<div class="empty">Rien ne correspond à ce filtre.</div>';
+          return;
+        }
+
+        $("#out").innerHTML = list
+          .map((g, i) => {
+            const app = g.fr.filter((f) => !f.vendor),
+              ven = g.fr.filter((f) => f.vendor);
+            const o = app[0]
+              ? { file: app[0].file, line: app[0].line }
+              : g.mo && !g.mo.vendor
+                ? g.mo
+                : null;
+            const li = (f) =>
+              '<li class="' +
+              (f.vendor ? "ven" : "app") +
+              '">' +
+              (f.file
+                ? esc(shortPath(f.file)) +
+                  '<span class="ln">:' +
+                  f.line +
+                  "</span> "
+                : "") +
+              esc(f.call) +
+              "</li>";
+            return (
+              '<article class="g l-' +
+              cls(g.level) +
+              '">' +
+              '<div class="top"><span class="lvl">' +
+              esc(g.level) +
+              '</span><div class="msg" title="' +
+              esc(g.msg) +
+              '">' +
+              esc(g.msg.length > 320 ? g.msg.slice(0, 320) + "…" : g.msg) +
+              '</div><span class="cnt">×' +
+              g.count +
+              "</span></div>" +
+              (g.first || g.last
+                ? '<div class="meta">Première : ' +
+                  esc(g.first || "?") +
+                  " — Dernière : " +
+                  esc(g.last || "?") +
+                  "</div>"
+                : "") +
+              (o
+                ? '<div class="origin"><b>Dans ton code :</b> ' +
+                  esc(shortPath(o.file)) +
+                  ":" +
+                  o.line +
+                  "</div>"
+                : "") +
+              (app.length > 1
+                ? '<ol class="fr">' + app.slice(1).map(li).join("") + "</ol>"
+                : "") +
+              (ven.length
+                ? '<details class="v"><summary>' +
+                  ven.length +
+                  ' frame(s) vendor / interne(s)</summary><ol class="fr">' +
+                  ven.map(li).join("") +
+                  "</ol></details>"
+                : "") +
+              '<div class="row"><button data-copy="' +
+              i +
+              '">Copier le résumé</button></div></article>'
+            );
+          })
+          .join("");
+
+        $("#out")
+          .querySelectorAll("[data-copy]")
+          .forEach(
+            (b) =>
+              (b.onclick = async () => {
+                const g = list[+b.dataset.copy];
+                const txt =
+                  g.level +
+                  " x" +
+                  g.count +
+                  "\n" +
+                  g.msg +
+                  "\n" +
+                  g.fr
+                    .filter((f) => !f.vendor)
+                    .map((f) => shortPath(f.file) + ":" + f.line + " " + f.call)
+                    .join("\n");
+                try {
+                  await navigator.clipboard.writeText(txt);
+                  b.textContent = "Copié";
+                } catch {
+                  b.textContent = "Copie impossible";
+                }
+                setTimeout(() => (b.textContent = "Copier le résumé"), 1500);
+              }),
+          );
+      }
+
+      function analyse() {
+        const t = $("#txt").value,
+          sel = $("#fmt").value;
+        const p =
+          sel === "auto"
+            ? PARSERS.find((x) => x.detect(t))
+            : PARSERS.find((x) => x.id === sel);
+        const entries = p ? p.parse(t) : [];
+        if (!entries.length) {
+          $("#bar").style.display = "none";
+          $("#stats").textContent = "";
+          $("#out").innerHTML =
+            '<div class="empty">Aucune entrée reconnue. Formats gérés : ' +
+            PARSERS.map((x) => x.name).join(", ") +
+            ".<br>Choisis le format à la main si la détection automatique se trompe.</div>";
+          return;
+        }
+        fmtName = p.name;
+        groups = build(entries);
+        activeLevels.clear();
+        const levels = [...new Set(groups.map((g) => g.level))].sort(
+          (a, b) => (SEV[a] ?? 9) - (SEV[b] ?? 9),
+        );
+        levels.forEach((l) => activeLevels.add(l));
+        $("#chips").innerHTML = levels
+          .map((l) => {
+            const n = groups
+              .filter((g) => g.level === l)
+              .reduce((s, g) => s + g.count, 0);
+            return (
+              '<button class="chip" aria-pressed="true" data-l="' +
+              l +
+              '">' +
+              l +
+              " " +
+              n +
+              "</button>"
+            );
+          })
+          .join("");
+        $("#chips")
+          .querySelectorAll(".chip")
+          .forEach(
+            (c) =>
+              (c.onclick = () => {
+                const on = c.getAttribute("aria-pressed") === "true";
+                c.setAttribute("aria-pressed", String(!on));
+                on
+                  ? activeLevels.delete(c.dataset.l)
+                  : activeLevels.add(c.dataset.l);
+                render();
+              }),
+          );
+        $("#bar").style.display = "flex";
+        $("#input").open = false;
+        render();
+      }
+
+      async function loadFile(f) {
+        if (!f) return;
+        $("#txt").value = await f.text();
+        analyse();
+      }
+
+      // Faux logs de démonstration : données entièrement fictives.
+      const SAMPLES = {
+        laravel: String.raw`[2026-10-24 08:02:11] production.ERROR: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'awa@example.com' for key 'users_email_unique' {"exception":"[object] (Illuminate\\Database\\UniqueConstraintViolationException(code: 23000): SQLSTATE[23000] at /var/www/shop/vendor/laravel/framework/src/Illuminate/Database/Connection.php:822)
+[stacktrace]
+#0 /var/www/shop/vendor/laravel/framework/src/Illuminate/Database/Connection.php(780): Illuminate\Database\Connection->runQueryCallback('insert into ...')
+#1 /var/www/shop/app/Http/Controllers/Auth/RegisterController.php(48): Illuminate\Database\Eloquent\Builder->create(Array)
+#2 {main}
+"}
+[2026-10-24 08:47:30] production.ERROR: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'koffi@example.com' for key 'users_email_unique' {"exception":"[object] (Illuminate\\Database\\UniqueConstraintViolationException(code: 23000): SQLSTATE[23000] at /var/www/shop/vendor/laravel/framework/src/Illuminate/Database/Connection.php:822)
+[stacktrace]
+#0 /var/www/shop/vendor/laravel/framework/src/Illuminate/Database/Connection.php(780): Illuminate\Database\Connection->runQueryCallback('insert into ...')
+#1 /var/www/shop/app/Http/Controllers/Auth/RegisterController.php(48): Illuminate\Database\Eloquent\Builder->create(Array)
+#2 {main}
+"}
+[2026-10-24 09:31:45] production.ERROR: Undefined variable $cart {"exception":"[object] (ErrorException(code: 0): Undefined variable $cart at /var/www/shop/app/Services/CheckoutService.php:67)
+[stacktrace]
+#0 /var/www/shop/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(256): Illuminate\Foundation\Bootstrap\HandleExceptions->handleError(2, 'Undefined varia...')
+#1 /var/www/shop/app/Services/CheckoutService.php(67): Illuminate\Foundation\Bootstrap\HandleExceptions->handleError(2)
+#2 /var/www/shop/app/Http/Controllers/CheckoutController.php(31): App\Services\CheckoutService->total()
+#3 {main}
+"}
+[2026-10-24 10:05:20] production.WARNING: Stock faible pour le produit 48 (reste 2)
+[2026-10-24 10:12:09] production.WARNING: Stock faible pour le produit 51 (reste 1)
+[2026-10-24 11:00:00] production.INFO: Commande 1043 validée.`,
+        node: String.raw`2026-10-24T08:10:01.120Z error: TypeError: Cannot read properties of undefined (reading 'id')
+    at getOrder (/srv/api/src/services/orders.js:42:18)
+    at async handler (/srv/api/src/routes/orders.js:17:5)
+    at async Layer.handle [as handle_request] (/srv/api/node_modules/express/lib/router/layer.js:95:5)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2026-10-24T08:12:44.907Z error: TypeError: Cannot read properties of undefined (reading 'id')
+    at getOrder (/srv/api/src/services/orders.js:42:18)
+    at async handler (/srv/api/src/routes/orders.js:17:5)
+    at async Layer.handle [as handle_request] (/srv/api/node_modules/express/lib/router/layer.js:95:5)
+2026-10-24T09:03:12.001Z error: Error: connect ECONNREFUSED 127.0.0.1:5432
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1555:16)
+    at connect (/srv/api/src/db/pool.js:23:11)
+2026-10-24T09:03:15.330Z warn: Slow query detected (1840 ms)
+2026-10-24T09:05:00.000Z info: Server listening on port 3000`,
+        python: String.raw`2026-10-24 09:00:03,412 ERROR payment failed
+Traceback (most recent call last):
+  File "/srv/shop/app/views.py", line 58, in checkout
+    charge = gateway.charge(order)
+  File "/srv/shop/app/gateway.py", line 21, in charge
+    return requests.post(URL, json=payload, timeout=5)
+  File "/srv/shop/venv/lib/python3.11/site-packages/requests/api.py", line 115, in post
+    return request("post", url, data=data, json=json, **kwargs)
+requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='api.pay.example', port=443): Max retries exceeded
+2026-10-24 09:20:41,118 ERROR payment failed
+Traceback (most recent call last):
+  File "/srv/shop/app/views.py", line 58, in checkout
+    charge = gateway.charge(order)
+  File "/srv/shop/app/gateway.py", line 21, in charge
+    return requests.post(URL, json=payload, timeout=5)
+  File "/srv/shop/venv/lib/python3.11/site-packages/requests/api.py", line 115, in post
+    return request("post", url, data=data, json=json, **kwargs)
+requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='api.pay.example', port=443): Max retries exceeded
+2026-10-24 10:02:09,774 ERROR import failed
+Traceback (most recent call last):
+  File "/srv/shop/app/importer.py", line 37, in parse_row
+    price = float(row["price"])
+ValueError: could not convert string to float: 'N/A'`,
+      };
+
+      PARSERS.forEach((p) =>
+        $("#fmt").insertAdjacentHTML(
+          "beforeend",
+          '<option value="' + p.id + '">' + p.name + "</option>",
+        ),
+      );
+      PARSERS.forEach((p) => {
+        const b = document.createElement("button");
+        b.textContent = p.name;
+        b.onclick = () => {
+          $("#txt").value = SAMPLES[p.id];
+          $("#fmt").value = "auto";
+          analyse();
+        };
+        $("#samples").appendChild(b);
+      });
+
+      $("#go").onclick = analyse;
+      $("#clear").onclick = () => {
+        $("#txt").value = "";
+        $("#out").innerHTML = "";
+        $("#stats").textContent = "";
+        $("#bar").style.display = "none";
+      };
+      $("#file").onchange = (e) => loadFile(e.target.files[0]);
+      $("#q").oninput = render;
+      $("#sort").onchange = render;
+      document.querySelector("label[for=file]").onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          $("#file").click();
+        }
+      };
+      document.addEventListener("dragover", (e) => e.preventDefault());
+      document.addEventListener("drop", (e) => {
+        e.preventDefault();
+        loadFile(e.dataTransfer.files[0]);
+      });
+    </script>
+  </body>
+</html>
