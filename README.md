@@ -4,7 +4,7 @@ Colle un log ou une stack trace **Laravel, Node.js ou Python** : l'outil détect
 
 **[Voir la démo](https://kevinadeossi.github.io/stacktrace-lens/)** : clique sur un exemple pour l'essayer sans log.
 
-![Capture d'écran](./screnshot.png)
+![Capture d'écran](./screenshot.png)
 
 ## Le problème
 
@@ -37,9 +37,19 @@ Un format = un objet dans le tableau `PARSERS` :
   parse: texte => [{ date, level, msg, frames: [{ file, line, call, vendor }] }] }
 ```
 
+## Structure
+
+- `index.html` : l'outil (HTML, CSS, JS)
+- `hints.js` : les règles de pistes rapides
+
+## Aide à la résolution
+
+- **Pistes rapides** : des règles intégrées (`hints.js`) proposent instantanément une cause probable et un correctif pour les erreurs courantes. Aucune IA, aucun réseau.
+- **Analyser avec Claude** (optionnel) : un bouton par erreur envoie ce seul groupe d'erreur à l'API Anthropic et affiche la réponse en direct. Il faut sa propre clé API, saisie dans la page.
+
 ## Confidentialité
 
-100 % local. Le fichier est analysé dans ton navigateur, aucune donnée n'est envoyée, aucune dépendance externe n'est chargée.
+L'analyse des logs est 100 % locale. Seul le bouton « Analyser avec Claude » envoie des données : le message et les frames d'**une** erreur, avec emails, tokens et mots de passe masqués, et le contenu exact est affiché avant la réponse. Ta clé API reste dans ton navigateur (jamais dans le code). Ne soumets pas de logs contenant des données sensibles que tu n'as pas le droit d'envoyer à un tiers.
 
 ## Limites
 
