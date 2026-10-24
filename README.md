@@ -4,7 +4,7 @@ Colle un log ou une stack trace **Laravel, Node.js ou Python** : l'outil détect
 
 **[Voir la démo](https://kevinadeossi.github.io/stacktrace-lens/)** : clique sur un exemple pour l'essayer sans log.
 
-![Capture d'écran](screenshot.png)
+![Capture d'écran](./screnshot.png)
 
 ## Le problème
 
