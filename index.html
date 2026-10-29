@@ -91,265 +91,265 @@ code{background:var(--code);padding:1px 5px;border-radius:4px}
 <div id="out"></div>
 </main>
 
-<script src="samples.js"></script>
-<script src="hints.js"></script>
-<script>
-const $ = s => document.querySelector(s);
-const SEV = {EMERGENCY:0,ALERT:1,CRITICAL:2,FATAL:2,ERROR:3,WARNING:4,WARN:4,NOTICE:5,INFO:6,DEBUG:7};
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const cls = l => (SEV[l] ?? 9) <= 3 ? 'err' : (l === 'WARNING' || l === 'WARN') ? 'warn' : 'info';
-const isVendor = f => !f || /[\\/](vendor|node_modules|site-packages|dist-packages)[\\/]|^node:|[\\/]lib[\\/]python|^<frozen/i.test(f);
-const mkFrame = (file, line, call) => ({file, line, call, vendor: isVendor(file)});
+  <script src="samples.js"></script>
+  <script src="hints.js"></script>
+  <script>
+    const $ = s => document.querySelector(s);
+    const SEV = {EMERGENCY:0,ALERT:1,CRITICAL:2,FATAL:2,ERROR:3,WARNING:4,WARN:4,NOTICE:5,INFO:6,DEBUG:7};
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const cls = l => (SEV[l] ?? 9) <= 3 ? 'err' : (l === 'WARNING' || l === 'WARN') ? 'warn' : 'info';
+    const isVendor = f => !f || /[\\/](vendor|node_modules|site-packages|dist-packages)[\\/]|^node:|[\\/]lib[\\/]python|^<frozen/i.test(f);
+    const mkFrame = (file, line, call) => ({file, line, call, vendor: isVendor(file)});
 
-// Pour ajouter un format : pousser un objet {id, name, detect(texte), parse(texte)} dans PARSERS.
-// parse() renvoie une liste d'entrées {date, level, msg, frames:[{file,line,call,vendor}], mo?}.
-const LARAVEL = /^\[(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]\s+([\w.-]+)\.([A-Za-z]+):\s?(.*)$/;
-const DATE = /^(\d{4}-\d{2}-\d{2}[T ][\d:.,]+Z?)/;
+    // Pour ajouter un format : pousser un objet {id, name, detect(texte), parse(texte)} dans PARSERS.
+    // parse() renvoie une liste d'entrées {date, level, msg, frames:[{file,line,call,vendor}], mo?}.
+    const LARAVEL = /^\[(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]\s+([\w.-]+)\.([A-Za-z]+):\s?(.*)$/;
+    const DATE = /^(\d{4}-\d{2}-\d{2}[T ][\d:.,]+Z?)/;
 
-const PARSERS = [
-{ id: 'laravel', name: 'Laravel',
-  detect: t => /^\[\d{4}-\d{2}-\d{2}[ T][\d:.,]+(?:Z|[+-]\d{2}:?\d{2})?\]\s+[\w.-]+\.[A-Za-z]+:/m.test(t),
-  parse(t) {
-    const out = []; let cur = null;
-    for (const line of t.split(/\r?\n/)) {
-      const m = line.match(LARAVEL);
-      if (m) {
-        const head = m[4].split('[stacktrace]')[0];
-        const mo = head.match(/ at ((?:[A-Za-z]:)?[^\s:()"]+\.php):(\d+)/);
-        cur = {date: m[1], level: m[3].toUpperCase(), msg: head, frames: [], mo: mo ? {file: mo[1], line: mo[2], vendor: isVendor(mo[1])} : null};
-        out.push(cur);
-      } else if (cur) {
-        const f = line.match(/^#\d+\s+(.*)$/);
-        if (!f) continue;
-        const p = f[1].match(/^(.*?)\((\d+)\):\s*(.*)$/);
-        cur.frames.push(p ? mkFrame(p[1], p[2], p[3]) : mkFrame('', '', f[1]));
-      }
+    const PARSERS = [
+    { id: 'laravel', name: 'Laravel',
+      detect: t => /^\[\d{4}-\d{2}-\d{2}[ T][\d:.,]+(?:Z|[+-]\d{2}:?\d{2})?\]\s+[\w.-]+\.[A-Za-z]+:/m.test(t),
+      parse(t) {
+        const out = []; let cur = null;
+        for (const line of t.split(/\r?\n/)) {
+          const m = line.match(LARAVEL);
+          if (m) {
+            const head = m[4].split('[stacktrace]')[0];
+            const mo = head.match(/ at ((?:[A-Za-z]:)?[^\s:()"]+\.php):(\d+)/);
+            cur = {date: m[1], level: m[3].toUpperCase(), msg: head, frames: [], mo: mo ? {file: mo[1], line: mo[2], vendor: isVendor(mo[1])} : null};
+            out.push(cur);
+          } else if (cur) {
+            const f = line.match(/^#\d+\s+(.*)$/);
+            if (!f) continue;
+            const p = f[1].match(/^(.*?)\((\d+)\):\s*(.*)$/);
+            cur.frames.push(p ? mkFrame(p[1], p[2], p[3]) : mkFrame('', '', f[1]));
+          }
+        }
+        return out;
+      }},
+    { id: 'python', name: 'Python',
+      detect: t => /^Traceback \(most recent call last\):/m.test(t),
+      parse(t) {
+        const out = []; let cur = null, prev = '';
+        for (const line of t.split(/\r?\n/)) {
+          if (/^Traceback \(most recent call last\):/.test(line)) {
+            cur = {date: (prev.match(DATE) || [])[1] || '', level: 'ERROR', msg: '', frames: []};
+            continue;
+          }
+          if (cur) {
+            const f = line.match(/^\s+File "(.+)", line (\d+)(?:, in (.+))?$/);
+            if (f) cur.frames.unshift(mkFrame(f[1], f[2], f[3] || ''));
+            else if (line && !/^\s/.test(line) && cur.frames.length) { cur.msg = line; out.push(cur); cur = null; }
+          } else if (line.trim()) prev = line;
+        }
+        return out;
+      }},
+    { id: 'node', name: 'Node.js',
+      detect: t => /^\s+at\s+.+:\d+:\d+\)?\s*$/m.test(t),
+      parse(t) {
+        const out = []; let cur = null;
+        for (const line of t.split(/\r?\n/)) {
+          const f = line.match(/^\s+at\s+(?:(.*?)\s+\()?(.+?):(\d+)(?::(\d+))?\)?\s*$/);
+          if (/^\s+at\s+/.test(line)) {
+            if (cur) cur.frames.push(f ? mkFrame(f[2], f[3], f[1] || '<anonymous>') : mkFrame('', '', line.trim().replace(/^at\s+/, '')));
+          } else if (line.trim() && !/^\s/.test(line)) {
+            const d = (line.match(DATE) || [])[1] || '';
+            let rest = line.slice(d.length).replace(/^[\s:-]+/, '');
+            const lv = rest.match(/^\[?(error|warn|warning|info|debug|fatal)\]?:?\s*(.*)$/i);
+            cur = {date: d, level: lv ? lv[1].toUpperCase() : /Error|Exception/.test(rest) ? 'ERROR' : 'INFO', msg: lv ? lv[2] : rest, frames: []};
+            out.push(cur);
+          }
+        }
+        return out;
+      }}
+    ];
+
+    const norm = s => s
+      .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '<email>')
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>')
+      .replace(/\b0x[0-9a-f]+\b/gi, '<hex>')
+      .replace(/(?<!\.(?:php|js|py):)\b\d+\b/g, 'N');
+
+    const shortPath = p => p.replace(/^.*?[\\/](app|routes|resources|database|config|bootstrap|tests|src|vendor|node_modules|site-packages)[\\/]/i, '$1/');
+
+    let groups = [], fmtName = '';
+    const activeLevels = new Set();
+
+    function build(entries) {
+      const map = new Map();
+      entries.forEach((e, i) => {
+        const key = e.level + '|' + norm(e.msg).slice(0, 400);
+        let g = map.get(key);
+        if (!g) { g = {level: e.level, msg: e.msg, count: 0, first: e.date, last: e.date, idx: i, fr: [], mo: null}; map.set(key, g); }
+        g.count++; g.last = e.date; g.idx = i;
+        if (e.frames.length) g.fr = e.frames;
+        if (e.mo) g.mo = e.mo;
+      });
+      return [...map.values()];
     }
-    return out;
-  }},
-{ id: 'python', name: 'Python',
-  detect: t => /^Traceback \(most recent call last\):/m.test(t),
-  parse(t) {
-    const out = []; let cur = null, prev = '';
-    for (const line of t.split(/\r?\n/)) {
-      if (/^Traceback \(most recent call last\):/.test(line)) {
-        cur = {date: (prev.match(DATE) || [])[1] || '', level: 'ERROR', msg: '', frames: []};
-        continue;
-      }
-      if (cur) {
-        const f = line.match(/^\s+File "(.+)", line (\d+)(?:, in (.+))?$/);
-        if (f) cur.frames.unshift(mkFrame(f[1], f[2], f[3] || ''));
-        else if (line && !/^\s/.test(line) && cur.frames.length) { cur.msg = line; out.push(cur); cur = null; }
-      } else if (line.trim()) prev = line;
+
+    function render() {
+      const q = $('#q').value.trim().toLowerCase();
+      const sort = $('#sort').value;
+      let list = groups.filter(g => activeLevels.has(g.level));
+      if (q) list = list.filter(g => (g.msg + g.fr.map(f => f.file + ' ' + f.call).join(' ')).toLowerCase().includes(q));
+      list.sort((a, b) => sort === 'count' ? b.count - a.count : sort === 'recent' ? b.idx - a.idx : ((SEV[a.level] ?? 9) - (SEV[b.level] ?? 9)) || b.count - a.count);
+
+      const total = list.reduce((n, g) => n + g.count, 0);
+      $('#stats').textContent = 'Format : ' + fmtName + ' — ' + list.length + ' erreur(s) distincte(s), ' + total + ' occurrence(s) affichée(s)';
+      if (!list.length) { $('#out').innerHTML = '<div class="empty">Rien ne correspond à ce filtre.</div>'; return; }
+
+      $('#out').innerHTML = list.map((g, i) => {
+        const app = g.fr.filter(f => !f.vendor), ven = g.fr.filter(f => f.vendor);
+        const o = app[0] ? {file: app[0].file, line: app[0].line} : (g.mo && !g.mo.vendor ? g.mo : null);
+        const li = f => '<li class="' + (f.vendor ? 'ven' : 'app') + '">' + (f.file ? esc(shortPath(f.file)) + '<span class="ln">:' + f.line + '</span> ' : '') + esc(f.call) + '</li>';
+        return '<article class="g l-' + cls(g.level) + '">' +
+          '<div class="top"><span class="lvl">' + esc(g.level) + '</span><div class="msg" title="' + esc(g.msg) + '">' + esc(g.msg.length > 320 ? g.msg.slice(0, 320) + '…' : g.msg) + '</div><span class="cnt">×' + g.count + '</span></div>' +
+          (g.first || g.last ? '<div class="meta">Première : ' + esc(g.first || '?') + ' — Dernière : ' + esc(g.last || '?') + '</div>' : '') +
+          (o ? '<div class="origin"><b>Dans ton code :</b> ' + esc(shortPath(o.file)) + ':' + o.line + '</div>' : '') + hintHtml(g) +
+          (app.length > 1 ? '<ol class="fr">' + app.slice(1).map(li).join('') + '</ol>' : '') +
+          (ven.length ? '<details class="v"><summary>' + ven.length + ' frame(s) vendor / interne(s)</summary><ol class="fr">' + ven.map(li).join('') + '</ol></details>' : '') +
+          '<div class="row"><button data-copy="' + i + '">Copier le résumé</button><button class="main" data-ai="' + i + '">Analyser avec Claude</button></div><div class="aibox">' + (g.aiHtml || '') + '</div></article>';
+      }).join('');
+
+      $('#out').querySelectorAll('[data-ai]').forEach(b => b.onclick = () => askClaude(list[+b.dataset.ai], b.closest('article').querySelector('.aibox'), b));
+      $('#out').querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+        const g = list[+b.dataset.copy];
+        const txt = g.level + ' x' + g.count + '\n' + g.msg + '\n' + g.fr.filter(f => !f.vendor).map(f => shortPath(f.file) + ':' + f.line + ' ' + f.call).join('\n');
+        try { await navigator.clipboard.writeText(txt); b.textContent = 'Copié'; } catch { b.textContent = 'Copie impossible'; }
+        setTimeout(() => b.textContent = 'Copier le résumé', 1500);
+      });
     }
-    return out;
-  }},
-{ id: 'node', name: 'Node.js',
-  detect: t => /^\s+at\s+.+:\d+:\d+\)?\s*$/m.test(t),
-  parse(t) {
-    const out = []; let cur = null;
-    for (const line of t.split(/\r?\n/)) {
-      const f = line.match(/^\s+at\s+(?:(.*?)\s+\()?(.+?):(\d+)(?::(\d+))?\)?\s*$/);
-      if (/^\s+at\s+/.test(line)) {
-        if (cur) cur.frames.push(f ? mkFrame(f[2], f[3], f[1] || '<anonymous>') : mkFrame('', '', line.trim().replace(/^at\s+/, '')));
-      } else if (line.trim() && !/^\s/.test(line)) {
-        const d = (line.match(DATE) || [])[1] || '';
-        let rest = line.slice(d.length).replace(/^[\s:-]+/, '');
-        const lv = rest.match(/^\[?(error|warn|warning|info|debug|fatal)\]?:?\s*(.*)$/i);
-        cur = {date: d, level: lv ? lv[1].toUpperCase() : /Error|Exception/.test(rest) ? 'ERROR' : 'INFO', msg: lv ? lv[2] : rest, frames: []};
-        out.push(cur);
+
+    function analyse() {
+      const t = $('#txt').value, sel = $('#fmt').value;
+      const p = sel === 'auto' ? PARSERS.find(x => x.detect(t)) : PARSERS.find(x => x.id === sel);
+      const entries = p ? p.parse(t) : [];
+      if (!entries.length) {
+        $('#bar').style.display = 'none'; $('#stats').textContent = '';
+        $('#out').innerHTML = '<div class="empty">Aucune entrée reconnue. Formats gérés : ' + PARSERS.map(x => x.name).join(', ') + '.<br>Choisis le format à la main si la détection automatique se trompe.</div>';
+        return;
       }
+      fmtName = p.name;
+      groups = build(entries);
+      activeLevels.clear();
+      const levels = [...new Set(groups.map(g => g.level))].sort((a, b) => (SEV[a] ?? 9) - (SEV[b] ?? 9));
+      levels.forEach(l => activeLevels.add(l));
+      $('#chips').innerHTML = levels.map(l => {
+        const n = groups.filter(g => g.level === l).reduce((s, g) => s + g.count, 0);
+        return '<button class="chip" aria-pressed="true" data-l="' + l + '">' + l + ' ' + n + '</button>';
+      }).join('');
+      $('#chips').querySelectorAll('.chip').forEach(c => c.onclick = () => {
+        const on = c.getAttribute('aria-pressed') === 'true';
+        c.setAttribute('aria-pressed', String(!on));
+        on ? activeLevels.delete(c.dataset.l) : activeLevels.add(c.dataset.l);
+        render();
+      });
+      $('#bar').style.display = 'flex';
+      $('#input').open = false;
+      render();
     }
-    return out;
-  }}
-];
 
-const norm = s => s
-  .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '<email>')
-  .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>')
-  .replace(/\b0x[0-9a-f]+\b/gi, '<hex>')
-  .replace(/(?<!\.(?:php|js|py):)\b\d+\b/g, 'N');
+    // ---- Aide IA (optionnelle) ----
+    // Modèle de l'API : à adapter si besoin (voir la documentation Anthropic).
+    const MODEL = 'claude-haiku-5-5';
+    const SYSTEM = 'Tu es un développeur senior avec 20 ans d’expérience. On te soumet une erreur extraite d’un log. Réponds en français, de façon concise et concrète : 1) la cause la plus probable, 2) le correctif précis avec un court extrait de code si utile, 3) comment vérifier que c’est réglé. Si l’information est insuffisante, dis ce qu’il manque au lieu d’inventer.';
+    const KEYNAME = 'stl_api_key';
 
-const shortPath = p => p.replace(/^.*?[\\/](app|routes|resources|database|config|bootstrap|tests|src|vendor|node_modules|site-packages)[\\/]/i, '$1/');
+    const redact = s => s
+      .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '<email>')
+      .replace(/Bearer\s+[\w.~+\/-]+=*/gi, 'Bearer <masqué>')
+      .replace(/\b(password|passwd|pwd|secret|token|api[_-]?key)(["']?\s*[=:]\s*)["']?[^\s"',;)]+/gi, '$1$2<masqué>')
+      .replace(/\b(?=[A-Za-z_-]*\d)[A-Za-z0-9_-]{32,}\b/g, '<masqué>');
 
-let groups = [], fmtName = '';
-const activeLevels = new Set();
+    function buildPrompt(g) {
+      const app = g.fr.filter(f => !f.vendor).slice(0, 10), ven = g.fr.filter(f => f.vendor).slice(0, 3);
+      const fr = f => '  ' + shortPath(f.file) + (f.file ? ':' + f.line : '') + ' ' + f.call;
+      return redact('Format : ' + fmtName + '\nNiveau : ' + g.level + '\nOccurrences : ' + g.count + '\nMessage : ' + g.msg.slice(0, 600) +
+        '\nFrames de mon code :\n' + (app.map(fr).join('\n') || '  (aucune)') +
+        '\nFrames de dépendances (extrait) :\n' + (ven.map(fr).join('\n') || '  (aucune)'));
+    }
 
-function build(entries) {
-  const map = new Map();
-  entries.forEach((e, i) => {
-    const key = e.level + '|' + norm(e.msg).slice(0, 400);
-    let g = map.get(key);
-    if (!g) { g = {level: e.level, msg: e.msg, count: 0, first: e.date, last: e.date, idx: i, fr: [], mo: null}; map.set(key, g); }
-    g.count++; g.last = e.date; g.idx = i;
-    if (e.frames.length) g.fr = e.frames;
-    if (e.mo) g.mo = e.mo;
-  });
-  return [...map.values()];
-}
+    const fmt = t => t.split('```').map((s, i) => i % 2
+      ? '<pre>' + esc(s.replace(/^\w*\n/, '')) + '</pre>'
+      : esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')).join('');
 
-function render() {
-  const q = $('#q').value.trim().toLowerCase();
-  const sort = $('#sort').value;
-  let list = groups.filter(g => activeLevels.has(g.level));
-  if (q) list = list.filter(g => (g.msg + g.fr.map(f => f.file + ' ' + f.call).join(' ')).toLowerCase().includes(q));
-  list.sort((a, b) => sort === 'count' ? b.count - a.count : sort === 'recent' ? b.idx - a.idx : ((SEV[a.level] ?? 9) - (SEV[b.level] ?? 9)) || b.count - a.count);
+    function hintHtml(g) {
+      if (typeof HINTS === 'undefined') return '';
+      const h = HINTS.find(x => x.re.test(g.msg));
+      return h ? '<div class="hint"><b>Piste rapide (règles intégrées) :</b> ' + esc(h.t) + '. ' + esc(h.f) + '</div>' : '';
+    }
 
-  const total = list.reduce((n, g) => n + g.count, 0);
-  $('#stats').textContent = 'Format : ' + fmtName + ' — ' + list.length + ' erreur(s) distincte(s), ' + total + ' occurrence(s) affichée(s)';
-  if (!list.length) { $('#out').innerHTML = '<div class="empty">Rien ne correspond à ce filtre.</div>'; return; }
+    async function askClaude(g, box, btn) {
+      const key = $('#key').value.trim();
+      if (!key) { $('#ai').open = true; $('#key').focus(); return; }
+      const prompt = buildPrompt(g);
+      box.innerHTML = '<details class="v"><summary>Données envoyées à l’API</summary><pre>' + esc(prompt) + '</pre></details><div class="ai-out">Analyse en cours…</div>';
+      const out = box.querySelector('.ai-out');
+      btn.disabled = true;
+      let txt = '';
+      try {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
+          body: JSON.stringify({model: MODEL, max_tokens: 900, stream: true, system: SYSTEM, messages: [{role: 'user', content: prompt}]})
+        });
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error((e.error && e.error.message) || 'HTTP ' + r.status); }
+        const rd = r.body.getReader(), dec = new TextDecoder();
+        let buf = '';
+        for (;;) {
+          const {done, value} = await rd.read();
+          if (done) break;
+          buf += dec.decode(value, {stream: true});
+          const lines = buf.split('\n'); buf = lines.pop();
+          for (const l of lines) {
+            if (!l.startsWith('data:')) continue;
+            let j; try { j = JSON.parse(l.slice(5)); } catch { continue; }
+            if (j.type === 'content_block_delta' && j.delta && j.delta.text) { txt += j.delta.text; out.innerHTML = fmt(txt); }
+            else if (j.type === 'error') throw new Error(j.error && j.error.message || 'Erreur API');
+          }
+        }
+        if (!txt) out.textContent = 'Réponse vide.';
+        g.aiHtml = box.innerHTML;
+      } catch (e) {
+        out.innerHTML = '<span class="bad">Erreur : ' + esc(e.message) + '</span>';
+      }
+      btn.disabled = false;
+    }
 
-  $('#out').innerHTML = list.map((g, i) => {
-    const app = g.fr.filter(f => !f.vendor), ven = g.fr.filter(f => f.vendor);
-    const o = app[0] ? {file: app[0].file, line: app[0].line} : (g.mo && !g.mo.vendor ? g.mo : null);
-    const li = f => '<li class="' + (f.vendor ? 'ven' : 'app') + '">' + (f.file ? esc(shortPath(f.file)) + '<span class="ln">:' + f.line + '</span> ' : '') + esc(f.call) + '</li>';
-    return '<article class="g l-' + cls(g.level) + '">' +
-      '<div class="top"><span class="lvl">' + esc(g.level) + '</span><div class="msg" title="' + esc(g.msg) + '">' + esc(g.msg.length > 320 ? g.msg.slice(0, 320) + '…' : g.msg) + '</div><span class="cnt">×' + g.count + '</span></div>' +
-      (g.first || g.last ? '<div class="meta">Première : ' + esc(g.first || '?') + ' — Dernière : ' + esc(g.last || '?') + '</div>' : '') +
-      (o ? '<div class="origin"><b>Dans ton code :</b> ' + esc(shortPath(o.file)) + ':' + o.line + '</div>' : '') + hintHtml(g) +
-      (app.length > 1 ? '<ol class="fr">' + app.slice(1).map(li).join('') + '</ol>' : '') +
-      (ven.length ? '<details class="v"><summary>' + ven.length + ' frame(s) vendor / interne(s)</summary><ol class="fr">' + ven.map(li).join('') + '</ol></details>' : '') +
-      '<div class="row"><button data-copy="' + i + '">Copier le résumé</button><button class="main" data-ai="' + i + '">Analyser avec Claude</button></div><div class="aibox">' + (g.aiHtml || '') + '</div></article>';
-  }).join('');
+    function saveKey() {
+      try { $('#remember').checked ? localStorage.setItem(KEYNAME, $('#key').value.trim()) : localStorage.removeItem(KEYNAME); } catch {}
+    }
+    try { const k = localStorage.getItem(KEYNAME); if (k) { $('#key').value = k; $('#remember').checked = true; } } catch {}
+    $('#key').oninput = saveKey;
+    $('#remember').onchange = saveKey;
+    // ---- fin Aide IA ----
 
-  $('#out').querySelectorAll('[data-ai]').forEach(b => b.onclick = () => askClaude(list[+b.dataset.ai], b.closest('article').querySelector('.aibox'), b));
-  $('#out').querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
-    const g = list[+b.dataset.copy];
-    const txt = g.level + ' x' + g.count + '\n' + g.msg + '\n' + g.fr.filter(f => !f.vendor).map(f => shortPath(f.file) + ':' + f.line + ' ' + f.call).join('\n');
-    try { await navigator.clipboard.writeText(txt); b.textContent = 'Copié'; } catch { b.textContent = 'Copie impossible'; }
-    setTimeout(() => b.textContent = 'Copier le résumé', 1500);
-  });
-}
+    async function loadFile(f) {
+      if (!f) return;
+      $('#txt').value = await f.text();
+      analyse();
+    }
 
-function analyse() {
-  const t = $('#txt').value, sel = $('#fmt').value;
-  const p = sel === 'auto' ? PARSERS.find(x => x.detect(t)) : PARSERS.find(x => x.id === sel);
-  const entries = p ? p.parse(t) : [];
-  if (!entries.length) {
-    $('#bar').style.display = 'none'; $('#stats').textContent = '';
-    $('#out').innerHTML = '<div class="empty">Aucune entrée reconnue. Formats gérés : ' + PARSERS.map(x => x.name).join(', ') + '.<br>Choisis le format à la main si la détection automatique se trompe.</div>';
-    return;
-  }
-  fmtName = p.name;
-  groups = build(entries);
-  activeLevels.clear();
-  const levels = [...new Set(groups.map(g => g.level))].sort((a, b) => (SEV[a] ?? 9) - (SEV[b] ?? 9));
-  levels.forEach(l => activeLevels.add(l));
-  $('#chips').innerHTML = levels.map(l => {
-    const n = groups.filter(g => g.level === l).reduce((s, g) => s + g.count, 0);
-    return '<button class="chip" aria-pressed="true" data-l="' + l + '">' + l + ' ' + n + '</button>';
-  }).join('');
-  $('#chips').querySelectorAll('.chip').forEach(c => c.onclick = () => {
-    const on = c.getAttribute('aria-pressed') === 'true';
-    c.setAttribute('aria-pressed', String(!on));
-    on ? activeLevels.delete(c.dataset.l) : activeLevels.add(c.dataset.l);
-    render();
-  });
-  $('#bar').style.display = 'flex';
-  $('#input').open = false;
-  render();
-}
-
-// ---- Aide IA (optionnelle) ----
-// Modèle de l'API : à adapter si besoin (voir la documentation Anthropic).
-const MODEL = 'claude-haiku-5-5';
-const SYSTEM = 'Tu es un développeur senior avec 20 ans d’expérience. On te soumet une erreur extraite d’un log. Réponds en français, de façon concise et concrète : 1) la cause la plus probable, 2) le correctif précis avec un court extrait de code si utile, 3) comment vérifier que c’est réglé. Si l’information est insuffisante, dis ce qu’il manque au lieu d’inventer.';
-const KEYNAME = 'stl_api_key';
-
-const redact = s => s
-  .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '<email>')
-  .replace(/Bearer\s+[\w.~+\/-]+=*/gi, 'Bearer <masqué>')
-  .replace(/\b(password|passwd|pwd|secret|token|api[_-]?key)(["']?\s*[=:]\s*)["']?[^\s"',;)]+/gi, '$1$2<masqué>')
-  .replace(/\b(?=[A-Za-z_-]*\d)[A-Za-z0-9_-]{32,}\b/g, '<masqué>');
-
-function buildPrompt(g) {
-  const app = g.fr.filter(f => !f.vendor).slice(0, 10), ven = g.fr.filter(f => f.vendor).slice(0, 3);
-  const fr = f => '  ' + shortPath(f.file) + (f.file ? ':' + f.line : '') + ' ' + f.call;
-  return redact('Format : ' + fmtName + '\nNiveau : ' + g.level + '\nOccurrences : ' + g.count + '\nMessage : ' + g.msg.slice(0, 600) +
-    '\nFrames de mon code :\n' + (app.map(fr).join('\n') || '  (aucune)') +
-    '\nFrames de dépendances (extrait) :\n' + (ven.map(fr).join('\n') || '  (aucune)'));
-}
-
-const fmt = t => t.split('```').map((s, i) => i % 2
-  ? '<pre>' + esc(s.replace(/^\w*\n/, '')) + '</pre>'
-  : esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')).join('');
-
-function hintHtml(g) {
-  if (typeof HINTS === 'undefined') return '';
-  const h = HINTS.find(x => x.re.test(g.msg));
-  return h ? '<div class="hint"><b>Piste rapide (règles intégrées) :</b> ' + esc(h.t) + '. ' + esc(h.f) + '</div>' : '';
-}
-
-async function askClaude(g, box, btn) {
-  const key = $('#key').value.trim();
-  if (!key) { $('#ai').open = true; $('#key').focus(); return; }
-  const prompt = buildPrompt(g);
-  box.innerHTML = '<details class="v"><summary>Données envoyées à l’API</summary><pre>' + esc(prompt) + '</pre></details><div class="ai-out">Analyse en cours…</div>';
-  const out = box.querySelector('.ai-out');
-  btn.disabled = true;
-  let txt = '';
-  try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
-      body: JSON.stringify({model: MODEL, max_tokens: 900, stream: true, system: SYSTEM, messages: [{role: 'user', content: prompt}]})
+    PARSERS.forEach(p => $('#fmt').insertAdjacentHTML('beforeend', '<option value="' + p.id + '">' + p.name + '</option>'));
+    const smp = $('#samples');
+    if (!smp || typeof SAMPLES === 'undefined') { if (smp) smp.remove(); }
+    else PARSERS.forEach(p => {
+      if (!SAMPLES[p.id]) return;
+      const b = document.createElement('button');
+      b.textContent = p.name;
+      b.onclick = () => { $('#txt').value = SAMPLES[p.id]; $('#fmt').value = 'auto'; analyse(); };
+      smp.appendChild(b);
     });
-    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error((e.error && e.error.message) || 'HTTP ' + r.status); }
-    const rd = r.body.getReader(), dec = new TextDecoder();
-    let buf = '';
-    for (;;) {
-      const {done, value} = await rd.read();
-      if (done) break;
-      buf += dec.decode(value, {stream: true});
-      const lines = buf.split('\n'); buf = lines.pop();
-      for (const l of lines) {
-        if (!l.startsWith('data:')) continue;
-        let j; try { j = JSON.parse(l.slice(5)); } catch { continue; }
-        if (j.type === 'content_block_delta' && j.delta && j.delta.text) { txt += j.delta.text; out.innerHTML = fmt(txt); }
-        else if (j.type === 'error') throw new Error(j.error && j.error.message || 'Erreur API');
-      }
-    }
-    if (!txt) out.textContent = 'Réponse vide.';
-    g.aiHtml = box.innerHTML;
-  } catch (e) {
-    out.innerHTML = '<span class="bad">Erreur : ' + esc(e.message) + '</span>';
-  }
-  btn.disabled = false;
-}
 
-function saveKey() {
-  try { $('#remember').checked ? localStorage.setItem(KEYNAME, $('#key').value.trim()) : localStorage.removeItem(KEYNAME); } catch {}
-}
-try { const k = localStorage.getItem(KEYNAME); if (k) { $('#key').value = k; $('#remember').checked = true; } } catch {}
-$('#key').oninput = saveKey;
-$('#remember').onchange = saveKey;
-// ---- fin Aide IA ----
-
-async function loadFile(f) {
-  if (!f) return;
-  $('#txt').value = await f.text();
-  analyse();
-}
-
-PARSERS.forEach(p => $('#fmt').insertAdjacentHTML('beforeend', '<option value="' + p.id + '">' + p.name + '</option>'));
-const smp = $('#samples');
-if (!smp || typeof SAMPLES === 'undefined') { if (smp) smp.remove(); }
-else PARSERS.forEach(p => {
-  if (!SAMPLES[p.id]) return;
-  const b = document.createElement('button');
-  b.textContent = p.name;
-  b.onclick = () => { $('#txt').value = SAMPLES[p.id]; $('#fmt').value = 'auto'; analyse(); };
-  smp.appendChild(b);
-});
-
-$('#go').onclick = analyse;
-$('#clear').onclick = () => { $('#txt').value = ''; $('#out').innerHTML = ''; $('#stats').textContent = ''; $('#bar').style.display = 'none'; };
-$('#file').onchange = e => loadFile(e.target.files[0]);
-$('#q').oninput = render;
-$('#sort').onchange = render;
-document.querySelector('label[for=file]').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#file').click(); } };
-document.addEventListener('dragover', e => e.preventDefault());
-document.addEventListener('drop', e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
-</script>
+    $('#go').onclick = analyse;
+    $('#clear').onclick = () => { $('#txt').value = ''; $('#out').innerHTML = ''; $('#stats').textContent = ''; $('#bar').style.display = 'none'; };
+    $('#file').onchange = e => loadFile(e.target.files[0]);
+    $('#q').oninput = render;
+    $('#sort').onchange = render;
+    document.querySelector('label[for=file]').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#file').click(); } };
+    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('drop', e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+  </script>
 </body>
 </html>
